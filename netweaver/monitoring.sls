@@ -27,13 +27,21 @@ prometheus_sap_host_exporter_pkg:
 {% set sap_instance_nr = '{:0>2}'.format(node.instance) %}
 {% set exporter_instance = '{}_{}{}'.format(node.sid.upper(), node.sap_instance.upper(), sap_instance_nr) %}
 {% set instance_name = node.sid.upper()~'_'~sap_instance_nr %}
+{% set monitoring_hosts = node.monitoring_hosts|default([node.virtual_host]) %}
 
-# we bind each exporter instance to a SAP instance virtual host
-sap_host_exporter_configuration_{{ exporter_instance }}:
+{% for monitoring_host in monitoring_hosts %}
+# be backward compatible with cluster resource names
+{% if monitoring_host == node.virtual_host %}
+{% set append_name = "" %}
+{% else %}
+{% set append_name = "_" + monitoring_host %}
+{% endif %}
+# we bind each exporter instance to a SAP instance virtual host or the values passed to "monitoring_hosts"
+sap_host_exporter_configuration_{{ exporter_instance }}_{{ monitoring_host }}:
   file.managed:
-    - name: /etc/sap_host_exporter/{{ exporter_instance }}.yaml
+    - name: /etc/sap_host_exporter/{{ exporter_instance }}{{ append_name }}.yaml
     - contents: |
-         address: {{ node.virtual_host }}
+         address: {{ monitoring_host }}
          sap-control-uds: /tmp/.sapstream5{{ sap_instance_nr }}13
     - require:
       - pkg: prometheus_sap_host_exporter_pkg
@@ -43,15 +51,15 @@ sap_host_exporter_configuration_{{ exporter_instance }}:
       - test -d /usr/sap/{{ node.sid.upper() }}/ASCS* || test -d /usr/sap/{{ node.sid.upper() }}/ERS*
 {% endif %}
 
-
-sap_host_exporter_service_{{ exporter_instance }}:
+sap_host_exporter_service_{{ exporter_instance }}_{{ monitoring_host }}:
   service.{{ service_status }}:
-    - name: prometheus-sap_host_exporter@{{ exporter_instance }}
+    # be backward compatible with cluster resource names
+    - name: prometheus-sap_host_exporter@{{ exporter_instance }}{{ append_name }}
     - enable: {{ service_enabled }}
     - restart: True
     - require:
       - pkg: prometheus_sap_host_exporter_pkg
-      - file: sap_host_exporter_configuration_{{ exporter_instance }}
+      - file: sap_host_exporter_configuration_{{ exporter_instance }}_{{ monitoring_host }}
 # on HA use case deploy ASCS|ERS on ERS|ASCS
 {% if on_ha_cs %}
     - onlyif:
@@ -59,8 +67,9 @@ sap_host_exporter_service_{{ exporter_instance }}:
 # on non-HA use case watch file for changes (not possible for disabled service)
 {% else %}
     - watch:
-      - file: sap_host_exporter_configuration_{{ exporter_instance }}
+      - file: sap_host_exporter_configuration_{{ exporter_instance }}_{{ monitoring_host }}
 {% endif %}
 
+{% endfor %}
 {% endif %}
 {% endfor %}

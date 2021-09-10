@@ -344,3 +344,12 @@ netweaver:
         $default: 60
         $help: Interval in seconds between retries (60 seconds by default for DB and 600 seconds for PAS and AAS)
         $optional: true
+      monitoring_hosts:
+        $name: Hosts to monitor
+        $type: edit-group
+        $help: If this entry exists all named hosts will be monitored (The value of "virtual_host" is the default)
+        $minItems: 0
+        $prototype:
+            $name: Hostname of Host to monitor
+            $type: text
+            $optional: true
